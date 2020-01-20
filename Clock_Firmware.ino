@@ -14,7 +14,7 @@
 #define DATA_PIN                  D6      // Lixie DIN connects to this pin
 #define NUM_DIGITS                6
 
-#define NTP_UPDATE_INTERVAL_MIN   15
+#define NTP_UPDATE_INTERVAL_MIN   1
 
 #define HOUR_BUTTON               D7      // These are pulled up internally, and should be
 #define HUE_BUTTON                D2      // tied to GND through momentary switches
@@ -28,7 +28,7 @@ ADC_MODE(ADC_VCC);
 
 Lixie_II lix(DATA_PIN, NUM_DIGITS);
 WiFiUDP ntp_UDP;
-NTPClient time_client(ntp_UDP, "pool.ntp.org", 0, 60000*NTP_UPDATE_INTERVAL_MIN);
+NTPClient time_client(ntp_UDP, "ntp.flirble.org", 0, 60000*NTP_UPDATE_INTERVAL_MIN);
 Ticker loading_run;
 Ticker lix_run;
 Ticker tick_run;
@@ -48,11 +48,11 @@ bool wifi_lost = false;
 bool sync_fail = false;
 
 struct conf {
-  int16_t time_zone_shift = 0;
+  int16_t time_zone_shift = -5;
   uint8_t hour_12_mode = false;
   uint8_t base_hue = 0;
   uint8_t current_mode = 0;
-  uint8_t six_digit_clock = false;
+  uint8_t six_digit_clock = true;
 };
 conf clock_config; // <- global configuration object
 
@@ -119,16 +119,7 @@ void setup() {
   print_info("run into an issue, please email us at team@lixielabs.com, or try our");
   print_info("GUI debugging monitor built specifically for this clock, found on GitHub:\n");
   print_info("https://github.com/connornishijima/Hourglass-Debugging-Monitor/releases\n");
-  print_info("This firmware ver. 1.0.0 was compiled on Arduino 1.8.10 for ESP8266");
-  print_info("core ver. 2.6.1 with a 160MHz Wemos D1 Mini with 3MB of SPIFFS as a");
-  print_info("target using these libraries:\n");
-
-  print_info("Lixie II     ver. 1.3.1");
-  print_info("FastLED      ver. 3.3.2");
-  print_info("ArduinoJson  ver. 6.13.0");
-  print_info("NTPClient    ver. 3.2.0");
-  print_info("WiFiManager  ver. 1.0.0 (development branch!)");
-  print_info("and libraries inclusive to the ESP8266 core (Ticker, DNSServer, etc.)\n");
+  print_info("This firmware ver. 1.0.0bis was compiled by Bodshal.\n");
 
   print_info("Runtime data is accessible through the Hourglass Debugging Monitor.\n\n");
 
@@ -206,7 +197,7 @@ void run_clock() {
     lix_run.attach_ms(20, lix_loop);
   }
 
-  if (t_now - settings_last_update > 5000 && settings_changed == true) {
+  if (t_now - settings_last_update > 15000 && settings_changed == true) {
     settings_changed = false;
     save_settings();
   }
