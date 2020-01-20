@@ -28,7 +28,7 @@ ADC_MODE(ADC_VCC);
 
 Lixie_II lix(DATA_PIN, NUM_DIGITS);
 WiFiUDP ntp_UDP;
-NTPClient time_client(ntp_UDP, "ntp.flirble.org", 0, 60000*NTP_UPDATE_INTERVAL_MIN);
+NTPClient time_client(ntp_UDP, "ntp.flirble.org", 0, 60000 * NTP_UPDATE_INTERVAL_MIN);
 Ticker loading_run;
 Ticker lix_run;
 Ticker tick_run;
@@ -42,6 +42,7 @@ uint8_t load_pos = 0;
 uint8_t device_debug_index = 0;
 uint32_t ticks_passed = 0;
 uint32_t last_tick = 0;
+uint32_t last_time = 0;
 bool tick_debug_printed = true;
 bool debug_output = false; // enabled by "ENABLE_DEBUG\n" over serial
 bool wifi_lost = false;
@@ -148,29 +149,45 @@ void lix_loop() {
 
 void run_clock() {
   t_now = millis();
-  if (t_now-last_tick >= 1000) {
+
+  if (ticks_passed < 2 && t_now - last_tick >= 1000) {
+    // Used to delay display for 2 seconds
     last_tick = t_now;
     ticks_passed++;
-    if(ticks_passed >= 2){
-      show_time();
-      if (!time_found) { // Cues initial fade in
-        time_found = true;
-        //lix.fade_in();
-      }
-      tick_tock();
-
-      if(wifi_lost){
-        time_client.update();
-      }
-    }
-    tick_debug_printed = false;    
   }
 
-  if (!time_client.update()) {
+  if (t_now - last_time >= 50) {
+    last_time = t_now;
+    // Update the display every 50ms; this way the seconds value is
+    // closely synchronized with the actual time
+    if (ticks_passed >= 2) {
+      show_time();
+    }
+
+    if (ss != last_seconds) {
+      // A new second has started
+      last_seconds = ss;
+
+      if (ticks_passed >= 2) {
+        if (!time_found) { // Cues initial fade in
+          time_found = true;
+          //lix.fade_in();
+        }
+        tick_tock();
+      }
+      tick_debug_printed = false;
+    }
+  }
+
+  bool did_get_time = time_client.update();
+
+  if (!did_get_time && time_client.getPacketSent()) {
+    // Did not get time, and an NTP packet was sent, presumably
+    // without reply
     print_error("NTP SYNC FAILED!");
     sync_fail = true;
   }
-  else if(sync_fail == true){
+  else if (sync_fail == true) {
     print_info("NTP re-synchronized!");
     sync_fail = false;
   }
@@ -184,6 +201,10 @@ void run_clock() {
     wifi_lost = false;
     print_debug("WIFI_CONNECTION", "CONNECTED");
     print_info("WiFi reconnected.");
+
+    // Attempt to get the time immediately, if we didn't just get it
+    if (!did_get_time)
+      did_get_time = time_client.forceUpdate();
   }
 
   if (t_now - last_tick >= 500 && tick_debug_printed == false) {
@@ -291,9 +312,12 @@ void load_settings() {
 
 void show_time() {
   //print_info("show_time()");
-  hh = time_client.getHours();
-  mm = time_client.getMinutes();
-  ss = time_client.getSeconds();
+
+  unsigned long epoch = time_client.getEpochTime();
+
+  hh = (epoch % 86400L) / 3600;
+  mm = (epoch % 3600) / 60;
+  ss = epoch % 60;
 
   print_debug("HOUR", hh);
   print_debug("MIN",  mm);
@@ -335,8 +359,6 @@ void show_time() {
 
   //Serial.print("TIME: ");
   //Serial.println((hh * 10000) + (mm * 100) + ss);
-
-  last_seconds = ss;
 }
 
 void color_for_mode() {
@@ -696,6 +718,7 @@ void init_ntp() {
   print_info("Synchronizing to NTP time server...");
   time_client.begin();
   time_client.setTimeOffset(clock_config.time_zone_shift * SECONDS_PER_HOUR);
+  time_client.setFractionalTime(true);
   print_debug("NTP_TIME", "INITIALIZED");
 }
 
@@ -951,6 +974,13 @@ void print_info(char* inf) {
   Serial.print("INFO");
   Serial.print(" = ");
   Serial.println(inf);
+}
+
+void print_info(uint32_t val) {
+  Serial.print("*HG: ");
+  Serial.print("INFO");
+  Serial.print(" = ");
+  Serial.println(val);
 }
 
 void print_full_device_info() {
