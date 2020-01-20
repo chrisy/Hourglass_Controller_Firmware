@@ -22,6 +22,10 @@
 #define BUZZER                    D8      // OPTIONAL
 #define COLOR_CYCLE               D1      // OPTIONAL
 #define NIGHT_DIMMING             D5      // OPTIONAL
+
+#define BRIGHTNESS_SLEW_RATE      0.05    // Rate per clock update for brightness slewing
+#define BRIGHTNESS_HIGH           1.0     // Full brightness; float from 0.0 to 1.0
+#define BRIGHTNESS_LOW            0.4     // Low brightness
 ///////////////////////////////////////////////////////////////////////////////////
 
 ADC_MODE(ADC_VCC);
@@ -35,7 +39,6 @@ Ticker tick_run;
 Ticker serial_run;
 
 #define SECONDS_PER_HOUR 3600
-bool time_found = false;
 bool lix_looping = false;
 uint8_t load_pos = 0;
 
@@ -169,10 +172,6 @@ void run_clock() {
       last_seconds = ss;
 
       if (ticks_passed >= 2) {
-        if (!time_found) { // Cues initial fade in
-          time_found = true;
-          //lix.fade_in();
-        }
         tick_tock();
       }
       tick_debug_printed = false;
@@ -311,8 +310,6 @@ void load_settings() {
 }
 
 void show_time() {
-  //print_info("show_time()");
-
   unsigned long epoch = time_client.getEpochTime();
 
   hh = (epoch % 86400L) / 3600;
@@ -323,17 +320,37 @@ void show_time() {
   print_debug("MIN",  mm);
   print_debug("SEC",  ss);
 
-  if (hh < 6 || hh >= 21) { // Dim overnight from 9PM to 6AM (21:00 to 06:00)
-    if (night_dimming_state == HIGH) { // But only if dimming is enabled
-      lix.brightness(0.4);
+  // Brightness is managed with a linear slew towards the
+  // target value. Since we're called every 50ms this should
+  // cause smooth changes.
+
+  static float brightness = 0.0;
+  float brightness_target;
+
+  if (night_dimming_state == HIGH && (hh < 6 || hh >= 21)) {
+    // Dim overnight from 9PM to 6AM (21:00 to 06:00)
+    brightness_target = BRIGHTNESS_LOW;
+  }
+  else {
+    brightness_target = BRIGHTNESS_HIGH;
+  }
+
+  if (fabs(brightness - brightness_target) > BRIGHTNESS_SLEW_RATE) {
+    if (brightness < brightness_target) {
+      // Need to increase the brightness!
+      brightness += BRIGHTNESS_SLEW_RATE;
     }
-    else { // If not enabled, full brightness
-      lix.brightness(1.0);
+    else {
+      // Need to decrease it
+      brightness -= BRIGHTNESS_SLEW_RATE;
     }
   }
-  else { // Or if not in the overnight time window, full brightness
-    lix.brightness(1.0);
+  else {
+    // Difference is small; we're at the target
+    brightness = brightness_target;
   }
+
+  lix.brightness(brightness);
 
   // 12 hour format conversion
   if (clock_config.hour_12_mode == true) {
