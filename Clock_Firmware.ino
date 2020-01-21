@@ -7,7 +7,7 @@
 #include <FS.h>                  // <
 
 #include <WiFiManager.h>         // https://github.com/tzapu/WiFiManager/tree/development **USES DEVELOPMENT BRANCH!** (NOT THE VERSION IN ARDUINO LIBRARY MANAGER)
-#include <NTPClient.h>           // https://github.com/arduino-libraries/NTPClient
+#include <NTPClient.h>           // https://github.com/chrisy/NTPClient/tree/fractional-time  for fractional second support
 #include <ArduinoJson.h>         // https://github.com/bblanchon/ArduinoJson
 
 // USER SETTINGS //////////////////////////////////////////////////////////////////
@@ -817,7 +817,7 @@ void init_displays() {
   //print_info("init_displays()");
   lix.begin();
   lix.max_power(5, 2000);
-  //lix.transition_time(200);
+  lix.transition_time(45);
   lix.write(888888);
   print_info("Lixie displays inititalized...");
 }
